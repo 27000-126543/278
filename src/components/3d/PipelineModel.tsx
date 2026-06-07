@@ -9,7 +9,9 @@ interface PipelineModelProps {
 
 export function PipelineModel({ pipeline }: PipelineModelProps) {
   const tubeRef = useRef<THREE.Mesh>(null);
-  const flowTextureRef = useRef<THREE.Texture | null>(null);
+  const leakRingRefs = useRef<Map<string, THREE.Mesh>>(new Map());
+  const leakSphereRefs = useRef<Map<string, THREE.Mesh>>(new Map());
+  const leakInnerRingRefs = useRef<Map<string, THREE.Mesh>>(new Map());
 
   const { curve, leakPoints } = useMemo(() => {
     const start = new THREE.Vector3(pipeline.startPoint.x, pipeline.startPoint.y, pipeline.startPoint.z);
@@ -30,8 +32,35 @@ export function PipelineModel({ pipeline }: PipelineModelProps) {
   }, [pipeline]);
 
   useFrame(({ clock }) => {
-    if (flowTextureRef.current) {
-      flowTextureRef.current.offset.x = clock.getElapsedTime() * 0.2;
+    const t = clock.getElapsedTime();
+    
+    leakRingRefs.current.forEach((mesh) => {
+      if (mesh) {
+        const mat = mesh.material as THREE.MeshBasicMaterial;
+        mat.opacity = 0.5 + Math.sin(t * 3) * 0.3;
+      }
+    });
+    
+    leakInnerRingRefs.current.forEach((mesh) => {
+      if (mesh) {
+        const mat = mesh.material as THREE.MeshBasicMaterial;
+        mat.opacity = 0.8 + Math.sin(t * 4) * 0.2;
+      }
+    });
+
+    leakSphereRefs.current.forEach((mesh) => {
+      if (mesh) {
+        const mat = mesh.material as THREE.MeshBasicMaterial;
+        mat.opacity = 0.7 + Math.sin(t * 5) * 0.3;
+        mesh.scale.setScalar(1 + Math.sin(t * 3) * 0.1);
+      }
+    });
+
+    if (tubeRef.current) {
+      const mat = tubeRef.current.material as THREE.MeshStandardMaterial;
+      if (pipeline.status === 'leak') {
+        mat.emissiveIntensity = 0.4 + Math.sin(t * 4) * 0.2;
+      }
     }
   });
 
@@ -54,7 +83,7 @@ export function PipelineModel({ pipeline }: PipelineModelProps) {
           metalness={0.7}
           roughness={0.3}
           emissive={getColor()}
-          emissiveIntensity={pipeline.status === 'leak' ? 0.5 : 0.15}
+          emissiveIntensity={pipeline.status === 'leak' ? 0.4 : 0.15}
         />
       </mesh>
 
@@ -70,17 +99,31 @@ export function PipelineModel({ pipeline }: PipelineModelProps) {
       {/* 泄漏点标记 */}
       {leakPoints.map((leak) => (
         <group key={leak.id} position={leak.position}>
-          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh
+            ref={(el) => {
+              if (el) leakRingRefs.current.set(leak.id, el);
+            }}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
             <ringGeometry args={[0.5, 0.7, 32]} />
-            <meshBasicMaterial color="#FF3B30" transparent opacity={0.8 + Math.sin(Date.now() * 0.01) * 0.2} side={THREE.DoubleSide} />
+            <meshBasicMaterial color="#FF3B30" transparent side={THREE.DoubleSide} />
           </mesh>
-          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh
+            ref={(el) => {
+              if (el) leakInnerRingRefs.current.set(leak.id, el);
+            }}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
             <ringGeometry args={[0.3, 0.4, 32]} />
-            <meshBasicMaterial color="#FF3B30" transparent opacity={0.9} side={THREE.DoubleSide} />
+            <meshBasicMaterial color="#FF3B30" transparent side={THREE.DoubleSide} />
           </mesh>
-          <mesh>
+          <mesh
+            ref={(el) => {
+              if (el) leakSphereRefs.current.set(leak.id, el);
+            }}
+          >
             <sphereGeometry args={[0.2, 16, 16]} />
-            <meshBasicMaterial color="#FF3B30" transparent opacity={0.8 + Math.sin(Date.now() * 0.015) * 0.2} />
+            <meshBasicMaterial color="#FF3B30" transparent />
           </mesh>
         </group>
       ))}

@@ -87,9 +87,9 @@ export function MeteringStationModel({ station, onClick }: MeteringStationModelP
       </mesh>
 
       {/* 状态灯 */}
-      <mesh position={[0, 3.8, 0]}>
+      <mesh ref={statusLightRef} position={[0, 3.8, 0]}>
         <sphereGeometry args={[0.25, 16, 16]} />
-        <meshBasicMaterial color={statusColor} transparent opacity={station.status !== 'normal' ? (Math.sin(Date.now() * 0.008) * 0.3 + 0.7) : 1} />
+        <meshBasicMaterial color={statusColor} transparent />
       </mesh>
 
       {/* 选中高亮 */}

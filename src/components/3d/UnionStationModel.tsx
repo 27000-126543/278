@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import type { UnionStation } from '@/types';
 import * as THREE from 'three';
@@ -10,6 +11,43 @@ interface UnionStationModelProps {
 
 export function UnionStationModel({ station, onClick }: UnionStationModelProps) {
   const [hovered, setHovered] = useState(false);
+  const statusLightRef = useRef<THREE.Mesh>(null);
+  const separatorRefs = useRef<Map<string, THREE.Mesh>>(new Map());
+
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    
+    if (statusLightRef.current) {
+      const mat = statusLightRef.current.material as THREE.MeshBasicMaterial;
+      if (station.status !== 'normal') {
+        mat.opacity = Math.sin(t * 4) * 0.3 + 0.7;
+      } else {
+        mat.opacity = 1;
+      }
+    }
+
+    station.separators.forEach((sep) => {
+      const mesh = separatorRefs.current.get(sep.id);
+      if (mesh) {
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        if (sep.isActive) {
+          if (sep.isStandby) {
+            mat.emissive.set('#34C759');
+            mat.emissiveIntensity = 0.4 + Math.sin(t * 2) * 0.1;
+            mat.color.set('#1E40AF');
+          } else {
+            mat.emissive.set('#1E40AF');
+            mat.emissiveIntensity = 0.2;
+            mat.color.set('#1E40AF');
+          }
+        } else {
+          mat.emissive.set('#000000');
+          mat.emissiveIntensity = 0;
+          mat.color.set('#374151');
+        }
+      }
+    });
+  });
 
   const getStatusColor = () => {
     if (station.status === 'alarm') return '#FF3B30';
@@ -50,14 +88,17 @@ export function UnionStationModel({ station, onClick }: UnionStationModelProps) 
       {/* 分离器组 */}
       {station.separators.map((sep, index) => (
         <group key={sep.id} position={[-4 + index * 3, 2.5, 2.5]}>
-          <mesh castShadow>
+          <mesh
+            ref={(el) => {
+              if (el) separatorRefs.current.set(sep.id, el);
+            }}
+            castShadow
+          >
             <cylinderGeometry args={[0.8, 0.9, 3, 12]} />
             <meshStandardMaterial
               color={sep.isActive ? '#1E40AF' : '#374151'}
               metalness={0.6}
               roughness={0.4}
-              emissive={sep.isActive ? '#1E40AF' : '#000000'}
-              emissiveIntensity={sep.isActive ? 0.2 : 0}
             />
           </mesh>
           {/* 液位指示 */}
@@ -65,6 +106,13 @@ export function UnionStationModel({ station, onClick }: UnionStationModelProps) 
             <boxGeometry args={[0.3, (sep.liquidLevel / 100) * 2.8, 0.05]} />
             <meshBasicMaterial color={sep.liquidLevel > 80 ? '#FF3B30' : '#34C759'} />
           </mesh>
+          {/* 备用标签 */}
+          {sep.isStandby && sep.isActive && (
+            <mesh position={[0, 2, 0]}>
+              <sphereGeometry args={[0.15, 8, 8]} />
+              <meshBasicMaterial color="#34C759" />
+            </mesh>
+          )}
         </group>
       ))}
 
@@ -83,9 +131,9 @@ export function UnionStationModel({ station, onClick }: UnionStationModelProps) 
       </mesh>
 
       {/* 状态灯 */}
-      <mesh position={[0, 7, 0]}>
+      <mesh ref={statusLightRef} position={[0, 7, 0]}>
         <sphereGeometry args={[0.35, 16, 16]} />
-        <meshBasicMaterial color={statusColor} transparent opacity={station.status !== 'normal' ? (Math.sin(Date.now() * 0.008) * 0.3 + 0.7) : 1} />
+        <meshBasicMaterial color={statusColor} transparent />
       </mesh>
 
       {/* 选中高亮 */}
@@ -104,6 +152,11 @@ export function UnionStationModel({ station, onClick }: UnionStationModelProps) 
             <div className="text-xs text-gray-300 mt-1">
               分离器: {station.separators.filter(s => s.isActive).length} 运行中
             </div>
+            {station.separators.some(s => s.isStandby && s.isActive) && (
+              <div className="text-xs text-status-normal mt-1">
+                ✓ 备用分离器运行中
+              </div>
+            )}
           </div>
         </Html>
       )}

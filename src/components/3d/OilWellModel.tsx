@@ -14,14 +14,40 @@ export function OilWellModel({ well, isSelected, onClick }: OilWellModelProps) {
   const groupRef = useRef<THREE.Group>(null);
   const horseHeadRef = useRef<THREE.Mesh>(null);
   const walkingBeamRef = useRef<THREE.Mesh>(null);
+  const statusLightRef = useRef<THREE.Mesh>(null);
+  const derrickRef = useRef<THREE.Mesh>(null);
   const [hovered, setHovered] = useState(false);
 
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
+    
     if (horseHeadRef.current && walkingBeamRef.current) {
       const angle = Math.sin(t * 2) * 0.3;
       horseHeadRef.current.rotation.x = angle;
       walkingBeamRef.current.rotation.x = angle;
+    }
+
+    if (statusLightRef.current) {
+      const mat = statusLightRef.current.material as THREE.MeshBasicMaterial;
+      if (well.status !== 'normal') {
+        mat.opacity = Math.sin(t * 5) * 0.3 + 0.7;
+      } else {
+        mat.opacity = 1;
+      }
+    }
+
+    if (derrickRef.current) {
+      const mat = derrickRef.current.material as THREE.MeshStandardMaterial;
+      if (well.status === 'alarm') {
+        mat.emissive.set('#FF3B30');
+        mat.emissiveIntensity = 0.3 + Math.sin(t * 4) * 0.2;
+      } else if (well.status === 'warning') {
+        mat.emissive.set('#FF8C00');
+        mat.emissiveIntensity = 0.15 + Math.sin(t * 3) * 0.1;
+      } else {
+        mat.emissive.set('#000000');
+        mat.emissiveIntensity = 0;
+      }
     }
   });
 
@@ -33,7 +59,6 @@ export function OilWellModel({ well, isSelected, onClick }: OilWellModelProps) {
   };
 
   const statusColor = getStatusColor();
-  const shouldBlink = well.status === 'alarm' || well.status === 'warning';
 
   return (
     <group
@@ -53,7 +78,7 @@ export function OilWellModel({ well, isSelected, onClick }: OilWellModelProps) {
       </mesh>
 
       {/* 井架 */}
-      <mesh position={[0, 2, 0]} castShadow>
+      <mesh ref={derrickRef} position={[0, 2, 0]} castShadow>
         <cylinderGeometry args={[0.15, 0.2, 4, 8]} />
         <meshStandardMaterial color="#6B7280" metalness={0.7} roughness={0.3} />
       </mesh>
@@ -67,7 +92,13 @@ export function OilWellModel({ well, isSelected, onClick }: OilWellModelProps) {
       {/* 驴头 */}
       <mesh ref={horseHeadRef} position={[0, 4, 2.8]} castShadow>
         <sphereGeometry args={[0.6, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshStandardMaterial color={statusColor} metalness={0.5} roughness={0.3} emissive={statusColor} emissiveIntensity={hovered || isSelected ? 0.5 : 0.2} />
+        <meshStandardMaterial 
+          color={statusColor} 
+          metalness={0.5} 
+          roughness={0.3} 
+          emissive={statusColor} 
+          emissiveIntensity={hovered || isSelected ? 0.5 : 0.2} 
+        />
       </mesh>
 
       {/* 抽油杆 */}
@@ -83,9 +114,9 @@ export function OilWellModel({ well, isSelected, onClick }: OilWellModelProps) {
       </mesh>
 
       {/* 状态指示灯 */}
-      <mesh position={[0, 5.2, 0]}>
+      <mesh ref={statusLightRef} position={[0, 5.2, 0]}>
         <sphereGeometry args={[0.2, 16, 16]} />
-        <meshBasicMaterial color={statusColor} transparent opacity={shouldBlink ? (Math.sin(Date.now() * 0.01) * 0.3 + 0.7) : 1} />
+        <meshBasicMaterial color={statusColor} transparent />
       </mesh>
 
       {/* 选中高亮环 */}
@@ -107,6 +138,11 @@ export function OilWellModel({ well, isSelected, onClick }: OilWellModelProps) {
             <div className="text-xs text-gray-300">
               泵效: <span className={well.pumpEfficiency < 30 ? 'text-status-alarm' : 'text-status-normal'}>{well.pumpEfficiency.toFixed(1)}%</span>
             </div>
+            {well.status === 'alarm' && (
+              <div className="text-xs text-status-alarm mt-1 font-medium">
+                ⚠️ 报警中
+              </div>
+            )}
           </div>
         </Html>
       )}

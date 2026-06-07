@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import type { InjectionWell } from '@/types';
 import * as THREE from 'three';
@@ -10,6 +11,30 @@ interface InjectionWellModelProps {
 
 export function InjectionWellModel({ well, onClick }: InjectionWellModelProps) {
   const [hovered, setHovered] = useState(false);
+  const statusLightRef = useRef<THREE.Mesh>(null);
+  const buildingRef = useRef<THREE.Mesh>(null);
+
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    if (statusLightRef.current) {
+      const mat = statusLightRef.current.material as THREE.MeshBasicMaterial;
+      if (well.status !== 'normal') {
+        mat.opacity = Math.sin(t * 5) * 0.3 + 0.7;
+      } else {
+        mat.opacity = 1;
+      }
+    }
+    if (buildingRef.current) {
+      const mat = buildingRef.current.material as THREE.MeshStandardMaterial;
+      if (well.status === 'warning') {
+        mat.emissive.set('#FF8C00');
+        mat.emissiveIntensity = Math.sin(t * 3) * 0.2 + 0.15;
+      } else {
+        mat.emissive.set('#000000');
+        mat.emissiveIntensity = 0;
+      }
+    }
+  });
 
   const getStatusColor = () => {
     if (well.status === 'alarm') return '#FF3B30';
@@ -42,7 +67,7 @@ export function InjectionWellModel({ well, onClick }: InjectionWellModelProps) {
       </mesh>
 
       {/* 顶部阀门组 */}
-      <mesh position={[0, 4, 0]} castShadow>
+      <mesh ref={buildingRef} position={[0, 4, 0]} castShadow>
         <boxGeometry args={[1.2, 0.8, 1.2]} />
         <meshStandardMaterial color="#5B21B6" metalness={0.5} roughness={0.5} />
       </mesh>
@@ -60,9 +85,9 @@ export function InjectionWellModel({ well, onClick }: InjectionWellModelProps) {
       </mesh>
 
       {/* 状态灯 */}
-      <mesh position={[0, 4.8, 0]}>
+      <mesh ref={statusLightRef} position={[0, 4.8, 0]}>
         <sphereGeometry args={[0.2, 16, 16]} />
-        <meshBasicMaterial color={statusColor} transparent opacity={well.status !== 'normal' ? (Math.sin(Date.now() * 0.008) * 0.3 + 0.7) : 1} />
+        <meshBasicMaterial color={statusColor} transparent />
       </mesh>
 
       {/* 选中高亮 */}
