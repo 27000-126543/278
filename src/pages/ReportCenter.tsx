@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileSpreadsheet, Download, Calendar, BarChart3 } from 'lucide-react';
+import { FileSpreadsheet, Download, Calendar, BarChart3, Check, Loader2 } from 'lucide-react';
 import { useOilFieldStore } from '@/store/useOilFieldStore';
 import { useAlarmStore } from '@/store/useAlarmStore';
 import { useWorkOrderStore } from '@/store/useWorkOrderStore';
@@ -10,11 +10,23 @@ export function ReportCenter() {
   const { alarms } = useAlarmStore();
   const { workOrders } = useWorkOrderStore();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportSuccess, setExportSuccess] = useState(false);
 
   const report = generateDailyReport(selectedDate, oilWells, alarms, workOrders);
 
   const handleExport = () => {
-    exportToExcel(report);
+    setIsExporting(true);
+    setExportSuccess(false);
+    
+    setTimeout(() => {
+      const result = exportToExcel(report);
+      setIsExporting(false);
+      if (result) {
+        setExportSuccess(true);
+        setTimeout(() => setExportSuccess(false), 3000);
+      }
+    }, 500);
   };
 
   return (
@@ -36,10 +48,29 @@ export function ReportCenter() {
           </div>
           <button
             onClick={handleExport}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-tech-blue to-tech-cyan text-dark-900 rounded-lg font-medium hover:shadow-lg hover:shadow-tech-blue/30 transition-all"
+            disabled={isExporting}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+              exportSuccess
+                ? 'bg-status-normal text-white'
+                : 'bg-gradient-to-r from-tech-blue to-tech-cyan text-dark-900 hover:shadow-lg hover:shadow-tech-blue/30'
+            } ${isExporting ? 'opacity-70 cursor-not-allowed' : ''}`}
           >
-            <Download size={18} />
-            导出Excel
+            {isExporting ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                导出中...
+              </>
+            ) : exportSuccess ? (
+              <>
+                <Check size={18} />
+                导出成功
+              </>
+            ) : (
+              <>
+                <Download size={18} />
+                导出Excel
+              </>
+            )}
           </button>
         </div>
       </div>

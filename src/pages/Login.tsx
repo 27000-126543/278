@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Camera, User, Shield, ChevronRight, Check, Loader2, ScanFace, AlertTriangle, X } from 'lucide-react';
+import { Camera, User, Shield, ChevronRight, Check, Loader2, ScanFace, AlertTriangle, X, KeyRound } from 'lucide-react';
 import { useUserStore } from '@/store/useUserStore';
 import type { UserRole } from '@/types';
 
@@ -13,6 +13,8 @@ interface FaceFeature {
   registered: boolean;
 }
 
+const FEATURE_STORAGE_KEY = 'oilfield_face_features_v2';
+
 const generateFeatureCode = () => {
   const chars = '0123456789ABCDEF';
   let code = '';
@@ -22,8 +24,6 @@ const generateFeatureCode = () => {
   }
   return code;
 };
-
-const FEATURE_STORAGE_KEY = 'oilfield_face_features';
 
 const loadStoredFeatures = (): FaceFeature[] => {
   try {
@@ -62,6 +62,8 @@ const calculateSimilarity = (code1: string, code2: string): number => {
   return matches / clean1.length;
 };
 
+const SIMILARITY_THRESHOLD = 0.8;
+
 export function Login({ onLogin }: LoginProps) {
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -72,6 +74,8 @@ export function Login({ onLogin }: LoginProps) {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [similarity, setSimilarity] = useState<number | null>(null);
+  const [showFailedModal, setShowFailedModal] = useState(false);
+  const [failedSimilarity, setFailedSimilarity] = useState<number>(0);
   const login = useUserStore((state) => state.login);
 
   useEffect(() => {
@@ -94,6 +98,7 @@ export function Login({ onLogin }: LoginProps) {
     setScannedCode(null);
     setLoginError(null);
     setSimilarity(null);
+    setShowFailedModal(false);
 
     const faceInfo = getFaceInfo(selectedRole);
     const needsRegister = !faceInfo?.registered || isRegisterMode;
@@ -102,9 +107,9 @@ export function Login({ onLogin }: LoginProps) {
 
     setTimeout(() => {
       setScanStep(3);
-      const newCode = generateFeatureCode();
       
       if (needsRegister) {
+        const newCode = generateFeatureCode();
         setScannedCode(newCode);
         setFaceFeatures(prev => prev.map(f => 
           f.role === selectedRole ? { ...f, featureCode: newCode, registered: true } : f
@@ -116,34 +121,44 @@ export function Login({ onLogin }: LoginProps) {
             setIsScanning(false);
             setScanStep(0);
             setIsRegisterMode(false);
-          }, 800);
+            login(selectedRole);
+            onLogin(selectedRole);
+          }, 1000);
         }, 800);
       } else {
-        const simulatedScanCode = Math.random() > 0.15 
-          ? faceInfo!.featureCode 
-          : generateFeatureCode();
-        setScannedCode(simulatedScanCode);
+        const isMatch = Math.random() > 0.35;
+        let scanned: string;
+        let sim: number;
         
-        const sim = calculateSimilarity(faceInfo!.featureCode, simulatedScanCode);
+        if (isMatch) {
+          scanned = faceInfo!.featureCode;
+          sim = 0.85 + Math.random() * 0.15;
+        } else {
+          scanned = generateFeatureCode();
+          sim = calculateSimilarity(faceInfo!.featureCode, scanned);
+        }
+        
+        setScannedCode(scanned);
         setSimilarity(sim);
         
         setTimeout(() => {
-          if (sim >= 0.8) {
+          if (sim >= SIMILARITY_THRESHOLD) {
             setScanStep(4);
             setTimeout(() => {
               login(selectedRole);
               onLogin(selectedRole);
               setIsScanning(false);
               setScanStep(0);
-            }, 600);
+            }, 800);
           } else {
             setScanStep(0);
             setIsScanning(false);
-            setLoginError(`人脸特征不匹配（相似度：${(sim * 100).toFixed(1)}%），请重新识别或联系管理员录入`);
+            setFailedSimilarity(sim);
+            setShowFailedModal(true);
           }
-        }, 800);
+        }, 1000);
       }
-    }, 1800);
+    }, 2000);
   };
 
   const getScanStatusText = () => {
@@ -151,9 +166,9 @@ export function Login({ onLogin }: LoginProps) {
     const needsRegister = !faceInfo?.registered || isRegisterMode;
     
     switch (scanStep) {
-      case 1: return needsRegister ? '正在采集人脸特征...' : '正在采集人脸特征...';
-      case 2: return '特征提取中...';
-      case 3: return needsRegister ? '正在录入特征库...' : '特征匹配验证中...';
+      case 1: return '正在采集人脸图像...';
+      case 2: return '正在提取特征码...';
+      case 3: return needsRegister ? '正在录入特征库...' : '正在比对特征码...';
       case 4: return needsRegister ? '录入成功！' : '验证通过！';
       default: return '';
     }
@@ -164,8 +179,20 @@ export function Login({ onLogin }: LoginProps) {
     setLoginError(null);
     setScannedCode(null);
     setSimilarity(null);
+    setShowFailedModal(false);
     const info = getFaceInfo(role);
     setIsRegisterMode(!info?.registered);
+  };
+
+  const handleRetry = () => {
+    setShowFailedModal(false);
+    setSimilarity(null);
+  };
+
+  const handleReRegister = () => {
+    setShowFailedModal(false);
+    setIsRegisterMode(true);
+    setSimilarity(null);
   };
 
   return (
@@ -205,7 +232,7 @@ export function Login({ onLogin }: LoginProps) {
           </div>
         </div>
 
-        <div className="col-span-2 tech-border p-8">
+        <div className="col-span-2 tech-border p-8 relative">
           <h2 className="font-display text-xl text-white mb-6 flex items-center gap-2">
             <ScanFace className="text-tech-blue" />
             人脸识别登录
@@ -246,9 +273,9 @@ export function Login({ onLogin }: LoginProps) {
                   </svg>
                 </div>
                 <p className="text-tech-blue mt-4 text-sm animate-pulse">{getScanStatusText()}</p>
-                {similarity !== null && (
-                  <p className={`mt-2 text-sm ${similarity >= 0.8 ? 'text-status-normal' : 'text-status-alarm'}`}>
-                    相似度: {(similarity * 100).toFixed(1)}%
+                {similarity !== null && scanStep >= 3 && (
+                  <p className={`mt-2 text-sm ${similarity >= SIMILARITY_THRESHOLD ? 'text-status-normal' : 'text-status-alarm'} font-medium`}>
+                    特征相似度: {(similarity * 100).toFixed(1)}%
                   </p>
                 )}
                 {scannedCode && showCode && (
@@ -281,17 +308,6 @@ export function Login({ onLogin }: LoginProps) {
               <AlertTriangle size={18} className="text-status-alarm shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="text-status-alarm text-sm">{loginError}</p>
-                {selectedRole && getFaceInfo(selectedRole)?.registered && (
-                  <button
-                    onClick={() => {
-                      setIsRegisterMode(true);
-                      setLoginError(null);
-                    }}
-                    className="text-tech-blue text-xs mt-1 hover:underline"
-                  >
-                    点击重新录入人脸特征
-                  </button>
-                )}
               </div>
               <button onClick={() => setLoginError(null)} className="text-gray-500 hover:text-white">
                 <X size={16} />
@@ -302,12 +318,14 @@ export function Login({ onLogin }: LoginProps) {
           <div className="flex items-center justify-between mb-4">
             <button
               onClick={() => setShowCode(!showCode)}
-              className="text-xs text-gray-500 hover:text-tech-blue transition-colors"
+              className="text-xs text-gray-500 hover:text-tech-blue transition-colors flex items-center gap-1"
             >
-              {showCode ? '隐藏' : '显示'}特征码
+              <KeyRound size={12} />
+              {showCode ? '隐藏特征码' : '显示特征码'}
             </button>
             {isRegisterMode && selectedRole && (
-              <span className="text-xs text-status-warning bg-status-warning/10 px-2 py-1 rounded">
+              <span className="text-xs text-status-warning bg-status-warning/10 px-2 py-1 rounded flex items-center gap-1">
+                <Check size={10} />
                 录入模式
               </span>
             )}
@@ -364,7 +382,7 @@ export function Login({ onLogin }: LoginProps) {
             {isScanning ? (
               <>
                 <Loader2 size={20} className="animate-spin" />
-                {isRegisterMode ? '录入中...' : '识别中...'}
+                {isRegisterMode ? '特征录入中...' : '识别验证中...'}
               </>
             ) : (
               <>
@@ -374,9 +392,71 @@ export function Login({ onLogin }: LoginProps) {
             )}
           </button>
 
+          <div className="mt-4 p-3 bg-dark-700/30 rounded-lg">
+            <p className="text-xs text-gray-500 flex items-center gap-1">
+              <KeyRound size={12} />
+              验证规则: 特征码相似度 ≥ {(SIMILARITY_THRESHOLD * 100).toFixed(0)}% 方可登录
+            </p>
+          </div>
+
           <p className="text-center text-gray-600 text-xs mt-4">
             本系统仅供演示使用，模拟人脸识别验证流程
           </p>
+
+          {showFailedModal && (
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center rounded-lg z-20">
+              <div className="tech-border border-status-alarm/50 bg-dark-800 p-6 max-w-sm mx-4">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-3 bg-status-alarm/20 rounded-full">
+                    <AlertTriangle size={24} className="text-status-alarm" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-status-alarm">验证失败</h3>
+                    <p className="text-gray-400 text-sm">人脸特征不匹配</p>
+                  </div>
+                </div>
+                
+                <div className="bg-dark-900/50 rounded-lg p-4 mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-400 text-sm">当前相似度</span>
+                    <span className="text-status-alarm font-display text-2xl">
+                      {(failedSimilarity * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-dark-700 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-status-alarm transition-all"
+                      style={{ width: `${failedSimilarity * 100}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between mt-1 text-xs text-gray-500">
+                    <span>0%</span>
+                    <span className="text-tech-blue">阈值 {(SIMILARITY_THRESHOLD * 100).toFixed(0)}%</span>
+                    <span>100%</span>
+                  </div>
+                </div>
+
+                <p className="text-gray-400 text-sm mb-4">
+                  请确保正对摄像头，光线充足，或重新录入人脸特征。
+                </p>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleRetry}
+                    className="flex-1 py-2 bg-tech-blue/20 text-tech-blue rounded-lg font-medium hover:bg-tech-blue/30 transition-colors"
+                  >
+                    重新识别
+                  </button>
+                  <button
+                    onClick={handleReRegister}
+                    className="flex-1 py-2 bg-gray-700 text-gray-300 rounded-lg font-medium hover:bg-gray-600 transition-colors"
+                  >
+                    重新录入
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
