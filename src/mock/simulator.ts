@@ -1,27 +1,39 @@
 import { useOilFieldStore } from '@/store/useOilFieldStore';
 import { useAlarmStore } from '@/store/useAlarmStore';
 import { useWorkOrderStore } from '@/store/useWorkOrderStore';
+import { useNotificationStore } from '@/store/useNotificationStore';
 
 const randomInRange = (min: number, max: number) => min + Math.random() * (max - min);
-
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
+let simulationInterval: ReturnType<typeof setInterval> | null = null;
+
 export const startDataSimulation = () => {
-  const interval = setInterval(() => {
-    const { oilWells, meteringStations, unionStations, pipelines, injectionWells, updateOilWell, updateMeteringStation, updateUnionStation, updatePipeline, updateInjectionWell } = useOilFieldStore.getState();
+  if (simulationInterval) return;
+
+  simulationInterval = setInterval(() => {
+    const state = useOilFieldStore.getState();
+    const { oilWells, meteringStations, unionStations, pipelines, injectionWells, updateOilWell, updateMeteringStation, updateUnionStation, updatePipeline, updateInjectionWell } = state;
     const { addAlarm } = useAlarmStore.getState();
     const { createWorkOrder } = useWorkOrderStore.getState();
+    const { addNotification } = useNotificationStore.getState();
 
     oilWells.forEach((well) => {
       const newProduction = clamp(well.productionRate + randomInRange(-2, 2), 10, 80);
       const newWaterCut = clamp(well.waterCut + randomInRange(-1, 1), 10, 70);
       const newDynamicFluidLevel = clamp(well.dynamicFluidLevel + randomInRange(-10, 10), 500, 1500);
       let newPumpEfficiency = clamp(well.pumpEfficiency + randomInRange(-1, 1), 20, 95);
-      const newH2s = clamp(well.h2sLevel + randomInRange(-2, 2), 0, 50);
-      const newCh4 = clamp(well.ch4Level + randomInRange(-3, 3), 0, 100);
+      let newH2s = clamp(well.h2sLevel + randomInRange(-2, 2), 0, 50);
+      let newCh4 = clamp(well.ch4Level + randomInRange(-3, 3), 0, 100);
 
-      if (Math.random() < 0.03) {
+      if (Math.random() < 0.05) {
         newPumpEfficiency = randomInRange(15, 28);
+      }
+      if (Math.random() < 0.03) {
+        newH2s = randomInRange(22, 50);
+      }
+      if (Math.random() < 0.03) {
+        newCh4 = randomInRange(65, 100);
       }
 
       let newStatus = well.status;
@@ -30,7 +42,7 @@ export const startDataSimulation = () => {
       if (newPumpEfficiency < 30) {
         newStatus = 'alarm';
         if (well.status !== 'alarm') {
-          const alarmId = addAlarm({
+          addAlarm({
             type: 'pump',
             level: 'danger',
             targetId: well.id,
@@ -44,6 +56,14 @@ export const startDataSimulation = () => {
             description: `泵效过低 (${newPumpEfficiency.toFixed(1)}%)，需要检修`,
             assignedTeam: '修井一队',
           });
+          addNotification({
+            type: 'danger',
+            title: `${well.name} 泵效异常`,
+            message: `泵效降至 ${newPumpEfficiency.toFixed(1)}%，已自动生成检修工单 ${woId}`,
+            duration: 8000,
+            showActions: true,
+            actionLabel: '查看工单',
+          });
         }
       } else if (waterCutChange > 5) {
         newStatus = 'warning';
@@ -54,6 +74,12 @@ export const startDataSimulation = () => {
             targetId: well.id,
             targetName: well.name,
             message: `含水率突增: 变化${waterCutChange.toFixed(1)}%，建议调参`,
+          });
+          addNotification({
+            type: 'warning',
+            title: `${well.name} 含水率异常`,
+            message: `含水率变化 ${waterCutChange.toFixed(1)}%，建议检查注水参数`,
+            duration: 6000,
           });
         }
       } else if (newH2s > 20 || newCh4 > 60) {
@@ -66,6 +92,14 @@ export const startDataSimulation = () => {
             targetName: well.name,
             message: `硫化氢浓度超标: ${newH2s.toFixed(1)}ppm，请注意安全`,
           });
+          addNotification({
+            type: 'danger',
+            title: '⚠️ 硫化氢超标报警',
+            message: `${well.name} H₂S浓度 ${newH2s.toFixed(1)}ppm，已通知应急组！`,
+            duration: 10000,
+            showActions: true,
+            actionLabel: '查看详情',
+          });
         }
         if (newCh4 > 60 && well.status !== 'alarm') {
           addAlarm({
@@ -74,6 +108,12 @@ export const startDataSimulation = () => {
             targetId: well.id,
             targetName: well.name,
             message: `甲烷浓度超标: ${newCh4.toFixed(1)}%LEL，请注意安全`,
+          });
+          addNotification({
+            type: 'danger',
+            title: '⚠️ 甲烷超标报警',
+            message: `${well.name} CH₄浓度 ${newCh4.toFixed(1)}%LEL，已通知应急组！`,
+            duration: 10000,
           });
         }
       } else {
@@ -100,8 +140,13 @@ export const startDataSimulation = () => {
 
     meteringStations.forEach((station) => {
       const newTotal = clamp(station.totalLiquid + randomInRange(-5, 5), 80, 200);
-      const newWaterCut = clamp(station.avgWaterCut + randomInRange(-0.5, 0.5), 20, 50);
+      let newWaterCut = clamp(station.avgWaterCut + randomInRange(-0.5, 0.5), 20, 50);
       let newStatus = station.status;
+      
+      if (Math.random() < 0.04) {
+        newWaterCut = newWaterCut + randomInRange(6, 12);
+      }
+      
       const waterCutChange = Math.abs(newWaterCut - station.lastWaterCut);
 
       if (waterCutChange > 5) {
@@ -113,6 +158,14 @@ export const startDataSimulation = () => {
             targetId: station.id,
             targetName: station.name,
             message: `计量站含水率突增: 变化${waterCutChange.toFixed(1)}%`,
+          });
+          addNotification({
+            type: 'warning',
+            title: `${station.name} 含水率突增`,
+            message: `变化幅度 ${waterCutChange.toFixed(1)}%，建议：检查来液井工况、调整加药量、优化分离参数`,
+            duration: 8000,
+            showActions: true,
+            actionLabel: '调参建议',
           });
         }
       } else {
@@ -130,14 +183,15 @@ export const startDataSimulation = () => {
     unionStations.forEach((station) => {
       const newSeparators = station.separators.map((sep) => {
         if (!sep.isActive) return sep;
-        const newLevel = clamp(sep.liquidLevel + randomInRange(-3, 3), 20, 95);
+        const newLevel = clamp(sep.liquidLevel + randomInRange(-3, 4), 20, 95);
         const newPressure = clamp(sep.pressure + randomInRange(-0.05, 0.05), 0.5, 1.5);
         return { ...sep, liquidLevel: newLevel, pressure: newPressure };
       });
 
       let newStatus = station.status;
       const activeSep = newSeparators.find((s) => s.isActive && !s.isStandby);
-      if (activeSep && activeSep.liquidLevel > activeSep.maxLevel) {
+      
+      if (activeSep && activeSep.liquidLevel > 80) {
         newStatus = 'alarm';
         if (station.status !== 'alarm') {
           addAlarm({
@@ -145,7 +199,13 @@ export const startDataSimulation = () => {
             level: 'danger',
             targetId: station.id,
             targetName: station.name,
-            message: `分离器液位超限，已自动切换备用分离器`,
+            message: `分离器液位超限（${activeSep.liquidLevel.toFixed(1)}%），已自动切换备用分离器`,
+          });
+          addNotification({
+            type: 'warning',
+            title: `${station.name} 分离器切换`,
+            message: `${activeSep.name} 液位 ${activeSep.liquidLevel.toFixed(1)}%，已自动切换至备用分离器`,
+            duration: 6000,
           });
         }
         const updatedSeps = newSeparators.map((s) => {
@@ -166,11 +226,11 @@ export const startDataSimulation = () => {
       const newPoints = pipeline.pressurePoints.map((point) => {
         let newPressure = clamp(point.pressure + randomInRange(-0.03, 0.03), 0.8, 1.5);
         let isLeak = point.isLeak;
-        const pressureDrop = point.lastPressure - newPressure;
+        const pressureDropPercent = ((point.lastPressure - newPressure) / point.lastPressure) * 100;
 
-        if (Math.random() < 0.01 && !point.isLeak) {
+        if (Math.random() < 0.015 && !point.isLeak) {
           isLeak = true;
-          newPressure = clamp(newPressure * 0.6, 0.3, 0.8);
+          newPressure = clamp(newPressure * 0.5, 0.3, 0.7);
         }
 
         if (isLeak && point.isLeak === false) {
@@ -181,12 +241,20 @@ export const startDataSimulation = () => {
             targetName: pipeline.name,
             message: `管线泄漏，位置: 距起点${point.position}km处`,
           });
-          createWorkOrder({
+          const woId = createWorkOrder({
             type: 'emergency',
             targetId: pipeline.id,
             targetName: pipeline.name,
             description: `管线泄漏抢修，位置: 距起点${point.position}km`,
             assignedTeam: '应急抢修队',
+          });
+          addNotification({
+            type: 'danger',
+            title: '🚨 管线泄漏报警',
+            message: `${pipeline.name} 距起点${point.position}km处检测到泄漏，已派单 ${woId}`,
+            duration: 12000,
+            showActions: true,
+            actionLabel: '查看位置',
           });
         }
 
@@ -205,8 +273,8 @@ export const startDataSimulation = () => {
       let newRate = clamp(well.injectionRate + randomInRange(-3, 3), 50, 150);
       let newStatus = well.status;
 
-      if (Math.random() < 0.02) {
-        newPressure = randomInRange(22, 28);
+      if (Math.random() < 0.03) {
+        newPressure = randomInRange(23, 28);
       }
 
       if (newPressure > 22) {
@@ -218,6 +286,14 @@ export const startDataSimulation = () => {
             targetId: well.id,
             targetName: well.name,
             message: `注水压力异常: ${newPressure.toFixed(1)}MPa，建议洗井`,
+          });
+          addNotification({
+            type: 'warning',
+            title: `${well.name} 注水压力异常`,
+            message: `压力 ${newPressure.toFixed(1)}MPa，建议：立即降低排量、安排热洗井作业、检查井下工具`,
+            duration: 7000,
+            showActions: true,
+            actionLabel: '洗井建议',
           });
         }
       } else {
@@ -236,6 +312,11 @@ export const startDataSimulation = () => {
       });
     });
   }, 3000);
+};
 
-  return () => clearInterval(interval);
+export const stopDataSimulation = () => {
+  if (simulationInterval) {
+    clearInterval(simulationInterval);
+    simulationInterval = null;
+  }
 };

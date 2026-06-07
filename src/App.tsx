@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavig
 import { useEffect, useState } from "react";
 import { useUserStore } from "@/store/useUserStore";
 import { Header } from "@/components/layout/Header";
+import { NotificationContainer } from "@/components/ui/NotificationContainer";
 import { Login } from "@/pages/Login";
 import { Dashboard } from "@/pages/Dashboard";
 import { AlarmCenter } from "@/pages/AlarmCenter";
@@ -67,6 +68,7 @@ function AppContent() {
   return (
     <div className="h-screen flex flex-col bg-dark-900 overflow-hidden">
       {showHeader && <Header onNavigate={handleNavigate} currentPage={currentPage} />}
+      <NotificationContainer />
       <main className="flex-1 overflow-hidden">
         <Routes>
           <Route path="/login" element={<Login onLogin={handleLogin} />} />
