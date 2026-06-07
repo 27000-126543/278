@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import type { MeteringStation } from '@/types';
 import * as THREE from 'three';
@@ -10,6 +11,30 @@ interface MeteringStationModelProps {
 
 export function MeteringStationModel({ station, onClick }: MeteringStationModelProps) {
   const [hovered, setHovered] = useState(false);
+  const statusLightRef = useRef<THREE.Mesh>(null);
+  const buildingRef = useRef<THREE.Mesh>(null);
+
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    if (statusLightRef.current) {
+      const mat = statusLightRef.current.material as THREE.MeshBasicMaterial;
+      if (station.status !== 'normal') {
+        mat.opacity = Math.sin(t * 4) * 0.3 + 0.7;
+      } else {
+        mat.opacity = 1;
+      }
+    }
+    if (buildingRef.current) {
+      const mat = buildingRef.current.material as THREE.MeshStandardMaterial;
+      if (station.status === 'warning') {
+        mat.emissive.set('#FF8C00');
+        mat.emissiveIntensity = Math.sin(t * 3) * 0.2 + 0.2;
+      } else {
+        mat.emissive.set('#000000');
+        mat.emissiveIntensity = 0;
+      }
+    }
+  });
 
   const getStatusColor = () => {
     if (station.status === 'alarm') return '#FF3B30';
@@ -36,7 +61,7 @@ export function MeteringStationModel({ station, onClick }: MeteringStationModelP
       </mesh>
 
       {/* 主建筑 */}
-      <mesh position={[0, 1.8, 0]} castShadow>
+      <mesh ref={buildingRef} position={[0, 1.8, 0]} castShadow>
         <boxGeometry args={[4, 2.4, 3]} />
         <meshStandardMaterial color="#374151" metalness={0.3} roughness={0.7} />
       </mesh>
