@@ -6,6 +6,8 @@ import type {
   InjectionWell,
   ProductionForecast,
 } from '@/types';
+import { forecastProduction } from '@/utils/forecast';
+import type { ForecastPoint } from '@/utils/forecast';
 
 const wellNames = ['Y1-1', 'Y1-2', 'Y1-3', 'Y2-1', 'Y2-2', 'Y2-3', 'Y3-1', 'Y3-2'];
 
@@ -29,6 +31,25 @@ const generateDynamometerCard = () => {
     points.push(50 + 30 * Math.sin(rad) + 10 * Math.sin(2 * rad));
   }
   return points;
+};
+
+const generate30DayHistoricalData = (baseValue: number, declineRate: number = 0.003): ForecastPoint[] => {
+  const data: ForecastPoint[] = [];
+  const today = new Date();
+  
+  for (let i = 29; i >= 0; i--) {
+    const date = new Date(today.getTime() - i * 86400000);
+    const dayFactor = 1 - i * declineRate;
+    const weeklyVariation = 1 + 0.05 * Math.sin(i * 0.5);
+    const randomNoise = 1 + (Math.random() - 0.5) * 0.08;
+    
+    data.push({
+      date: date.toISOString().split('T')[0],
+      value: Math.max(10, baseValue * dayFactor * weeklyVariation * randomNoise),
+    });
+  }
+  
+  return data;
 };
 
 export const generateInitialData = () => {
@@ -145,38 +166,23 @@ export const generateInitialData = () => {
     },
   ];
 
-  const forecasts: ProductionForecast[] = oilWells.map((well) => {
-    const historicalData = [];
-    const forecastData = [];
+  const forecasts: ProductionForecast[] = oilWells.map((well, idx) => {
+    const declineRates = [0.002, 0.004, 0.006, 0.003, 0.005, 0.002, 0.007, 0.004];
     const baseValue = well.productionRate;
-    const today = new Date();
-
-    for (let i = 14; i >= 1; i--) {
-      const date = new Date(today.getTime() - i * 86400000);
-      historicalData.push({
-        date: date.toISOString().split('T')[0],
-        value: baseValue * (1 - i * 0.005) + (Math.random() - 0.5) * baseValue * 0.1,
-      });
-    }
-
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(today.getTime() + i * 86400000);
-      const lastValue = historicalData[historicalData.length - 1].value;
-      forecastData.push({
-        date: date.toISOString().split('T')[0],
-        value: lastValue * (1 - i * 0.01) + (Math.random() - 0.5) * lastValue * 0.05,
-      });
-    }
+    
+    const historicalData = generate30DayHistoricalData(baseValue, declineRates[idx] || 0.003);
+    const forecastData = forecastProduction(historicalData, 7);
 
     const avgForecast = forecastData.reduce((sum, d) => sum + d.value, 0) / forecastData.length;
     const isLowProduction = avgForecast < 25;
 
     const suggestions = [
-      '建议进行压裂增产措施',
-      '建议优化抽油参数',
-      '建议检查泵况，必要时作业',
-      '建议进行酸化处理',
-      '建议调整工作制度',
+      '建议进行压裂增产措施，可提高产能15-25%',
+      '建议优化抽油参数，调整冲次和冲程',
+      '建议检查泵况，必要时进行检泵作业',
+      '建议进行酸化处理，改善渗流条件',
+      '建议调整工作制度，优化生产参数',
+      '建议进行深部调剖，改善吸水剖面',
     ];
 
     return {

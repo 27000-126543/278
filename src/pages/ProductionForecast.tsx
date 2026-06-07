@@ -69,7 +69,7 @@ export function ProductionForecast() {
           smooth: true,
           symbol: 'none',
           lineStyle: { color: '#A855F7', width: 2, type: 'dashed' },
-          data: [...Array(14).fill(null), ...forecast.forecastData.map(d => d.value)],
+          data: [...Array(30).fill(null), ...forecast.forecastData.map(d => d.value)],
           areaStyle: {
             color: {
               type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
